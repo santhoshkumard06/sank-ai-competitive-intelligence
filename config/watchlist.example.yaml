@@ -1,0 +1,31 @@
+# Example watchlist for the hackathon demo: the three AI app-builders named
+# in your own hackathon's Tools tab. URLs verified live as of June 2026.
+#
+# To reuse Sank for anything else (a different competitive set, or a
+# completely different domain like creator_comparison), copy this file and
+# point it at different entities/sources — nothing in src/sank/ changes.
+
+entities:
+  - name: "Lovable"
+    category: "no-code AI app builder"
+    sources:
+      - url: "https://docs.lovable.dev/changelog"
+        source_type: "changelog"
+        fetch_method: "html"
+        label: "Official changelog"
+
+  - name: "Cursor"
+    category: "AI coding IDE"
+    sources:
+      - url: "https://cursor.com/changelog"
+        source_type: "changelog"
+        fetch_method: "html"
+        label: "Official changelog"
+
+  - name: "Replit"
+    category: "browser-based AI dev environment"
+    sources:
+      - url: "https://docs.replit.com/updates"
+        source_type: "changelog"
+        fetch_method: "html"
+        label: "Official changelog"

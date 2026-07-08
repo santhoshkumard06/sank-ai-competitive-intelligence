@@ -1,0 +1,147 @@
+Metadata-Version: 2.4
+Name: sank
+Version: 0.1.0
+Summary: AI agent that watches public signals (competitors, creators, anything) and briefs you daily against your own reference corpus, using semantic search instead of keywords.
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: pydantic>=2.6
+Requires-Dist: httpx>=0.27
+Requires-Dist: beautifulsoup4>=4.12
+Requires-Dist: lxml>=5.0
+Requires-Dist: scikit-learn>=1.4
+Requires-Dist: numpy>=1.26
+Requires-Dist: pyyaml>=6.0
+Requires-Dist: tenacity>=8.2
+Requires-Dist: click>=8.1
+Requires-Dist: anthropic>=0.40
+Requires-Dist: google-genai>=1.0
+Requires-Dist: python-dotenv>=1.0
+Provides-Extra: pinecone
+Requires-Dist: pinecone>=5.0; extra == "pinecone"
+Provides-Extra: dev
+Requires-Dist: pytest>=8.0; extra == "dev"
+Requires-Dist: pytest-cov>=5.0; extra == "dev"
+
+# Sank
+
+An AI agent that watches public signals about anything you care about — competitors, creators, prices, anything with a public page — and turns them into a daily, severity-ranked briefing, by matching each new signal against your own reference corpus with **semantic search**, not keywords.
+
+Built for the Be10X AI Generalist Hackathon as a competitive-intelligence tool. Built to be reused for other domains without touching the core code — see [Adding a new domain](#adding-a-new-domain).
+
+## Why this exists
+
+PMs and founders spend hours a week manually checking competitor changelogs, pricing pages, and reviews. By the time it's written up, it's stale. Sank reads it for you, decides what's actually meaningful, judges whether it threatens *your* specific roadmap, and writes the digest — all reasoning steps a keyword-based tool or RSS reader cannot do.
+
+## Architecture
+
+```
+Public signals (changelog / pricing / reviews)
+        │
+        ▼
+  Fetch & clean (n8n-able, or run standalone)
+        │
+        ▼
+  Agent 1 — Signal extraction        (unstructured text → structured JSON)
+        │
+        ▼
+  Semantic match against your reference corpus   (TF-IDF locally, Pinecone in production)
+        │
+        ▼
+  Agent 2 — Threat / relevance scoring    (judges *why* it matters, not just *that* it matched)
+        │
+        ▼
+  Agent 3 — Briefing writer          (prioritizes, writes the final digest)
+```
+
+Every external dependency (the web, an LLM, a vector database) sits behind a small interface — `LLMClient`, `VectorStore` — and the three agents only ever talk to the interface. That's a deliberate choice, not incidental tidiness: it's what let this whole pipeline be built and fully tested (72 passing tests) with **zero API keys and zero internet access**, by swapping in offline stand-ins that behave identically from the agents' point of view. Flip back to the real implementations — or add a new provider entirely, as `GeminiLLMClient` was added after the fact — and nothing else in the codebase changes.
+
+## Project layout
+
+```
+src/sank/
+  models.py       Data contracts (Entity, Source, ReferenceItem, Signal, Digest, ...)
+  config.py       Loads YAML into validated, typed objects
+  fetch.py        Network fetch + HTML cleaning (split so cleaning is testable offline)
+  llm_client.py   LLMClient interface — GeminiLLMClient + AnthropicLLMClient (real) + MockLLMClient (tests)
+  vector_store.py VectorStore interface — LocalVectorStore (TF-IDF, offline) + PineconeVectorStore
+  agents.py       The 3 agents: extraction, scoring, briefing
+  pipeline.py     Wires it together; isolates per-source failures
+  cli.py          `sank run` / `sank validate`
+config/
+  domains/        Vocabulary + prompts per domain (this is the extensibility point)
+  watchlist.example.yaml        who/what to watch
+  reference_corpus.example.yaml what to compare against (e.g. your roadmap)
+tests/            72 tests, pytest, no API keys required
+sample_data/      A static HTML fixture used to test the cleaning logic offline
+```
+
+## Setup
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install -e ".[dev]"          # add "[pinecone]" too if you're using Pinecone
+cp .env.example .env             # then fill in GEMINI_API_KEY (see below)
+```
+
+**Get a free Gemini key (recommended, no credit card):** sign in at [aistudio.google.com](https://aistudio.google.com) with a Google account and create an API key. Gemini's free tier (≈15 requests/minute, 1,500/day on `gemini-2.5-flash`) is the only major provider with a genuinely permanent free tier — comfortably enough for this pipeline, which uses only a handful of calls per run. Anthropic and OpenAI both require a funded account; if you have credits, `--provider anthropic` works identically.
+
+Run the tests (no API key needed for this):
+```bash
+pytest
+```
+
+Run it for real:
+```bash
+sank validate --watchlist config/watchlist.example.yaml   # sanity-check config first
+sank run \
+  --watchlist config/watchlist.example.yaml \
+  --reference config/reference_corpus.example.yaml \
+  --domain config/domains/competitive_intelligence.yaml
+# add --provider anthropic to use Claude instead, if you have a funded account
+```
+
+That uses `--vector-store local` by default — TF-IDF, no Pinecone account needed, good enough to see the whole pipeline work end to end. Good faith warning: TF-IDF matches on shared vocabulary, so it won't catch a competitor's "one-click onboarding" as the same idea as your roadmap's "reduce setup friction" the way a real embedding model would. That's the one place where swapping in Pinecone (or sentence-transformers, or any embedding API) genuinely changes the quality of the output, not just the plumbing.
+
+### Swapping in Pinecone
+
+```python
+from sank.vector_store import PineconeVectorStore
+
+def embed(text: str) -> list[float]:
+    # Plug in whatever you want — sentence-transformers, OpenAI, Voyage,
+    # Cohere. Sank doesn't care, as long as it returns a fixed-size vector.
+    ...
+
+vs = PineconeVectorStore(
+    api_key=os.environ["PINECONE_API_KEY"],
+    index_name="sank-reference",
+    embed_fn=embed,
+    dimension=384,  # must match whatever embed() actually returns
+)
+```
+Verify the exact Pinecone call shapes against their current docs before relying on this in production — third-party SDKs move faster than this file will be updated. (The version here was checked against the live Pinecone Python SDK docs at the time of writing.)
+
+## Adding a new domain
+
+This is the part that proves Sank isn't hardcoded to competitive intelligence. Every word specific to "competitor" vs "creator" vs anything else lives in one YAML file — never in the Python code.
+
+1. Copy `config/domains/competitive_intelligence.yaml` to a new file.
+2. Change `entity_label` / `reference_label` and rewrite the three prompts for your domain (a worked example for tracking content creators instead of SaaS competitors is already in `config/domains/creator_comparison.yaml` — read it for the pattern).
+3. Write a new watchlist (who/what to watch) and reference corpus (what you're comparing against) YAML.
+4. Run `sank run --domain config/domains/your_new_domain.yaml --watchlist ... --reference ...`
+
+Nothing in `src/sank/` changes.
+
+## Known limitations (said plainly, not hidden)
+
+- `fetch.py` only implements `fetch_method: html`. A page that's blocked or heavily JS-rendered will fail that one source — the pipeline isolates it and keeps going, but it won't magically work around it. An RSS fallback or a paid scraping API is the natural v2 fix.
+- `LocalVectorStore` (TF-IDF) is a real, legitimate technique, not a toy — but it's meaningfully weaker than a transformer embedding at catching matches that share no vocabulary. Treat it as the offline/dev path, not the production one.
+- The "recommendation" Agent 3 can optionally produce isn't a trained recommender system — it's a generative reasoning step. Worth saying out loud if a judge or interviewer asks, rather than overclaiming.
+
+## Testing
+
+```bash
+pytest            # all 72 tests
+pytest -v          # verbose, see every test name
+pytest --cov=sank  # coverage, if you installed pytest-cov
+```

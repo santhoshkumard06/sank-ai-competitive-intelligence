@@ -1,0 +1,174 @@
+{
+  "name": "Sank \u2014 Daily Competitive Intelligence Agent",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 460],
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-000000000001",
+      "name": "Manual Test Run"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 9 * * 1-5"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 280],
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-000000000002",
+      "name": "Daily 9am Mon-Fri"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// ================================================================\n// ONLY CHANGE NEEDED: put your Gmail address on the line below\n// ================================================================\nconst RECIPIENT_EMAIL = 'YOUR_EMAIL@gmail.com';\n// ================================================================\n\nreturn [\n  { json: { name: 'Lovable', url: 'https://docs.lovable.dev/changelog',  recipientEmail: RECIPIENT_EMAIL } },\n  { json: { name: 'Cursor',  url: 'https://cursor.com/changelog',         recipientEmail: RECIPIENT_EMAIL } },\n  { json: { name: 'Replit',  url: 'https://docs.replit.com/updates',      recipientEmail: RECIPIENT_EMAIL } }\n];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 370],
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-000000000003",
+      "name": "Set Competitor Sources"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "User-Agent",
+              "value": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            },
+            {
+              "name": "Accept",
+              "value": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [740, 370],
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-000000000004",
+      "name": "Fetch Changelog Pages"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "function extractText(html) {\n  if (!html || typeof html !== 'string') return '';\n  return html\n    .replace(/<script[\\s\\S]*?<\\/script>/gi, '')\n    .replace(/<style[\\s\\S]*?<\\/style>/gi, '')\n    .replace(/<nav[\\s\\S]*?<\\/nav>/gi, '')\n    .replace(/<footer[\\s\\S]*?<\\/footer>/gi, '')\n    .replace(/<header[\\s\\S]*?<\\/header>/gi, '')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')\n    .replace(/&nbsp;/gi, ' ').replace(/&#\\d+;/gi, ' ').replace(/&[a-z]+;/gi, ' ')\n    .replace(/\\s+/g, ' ').trim();\n}\n\nconst COMPETITORS = ['Lovable', 'Cursor', 'Replit'];\nconst URLS = [\n  'https://docs.lovable.dev/changelog',\n  'https://cursor.com/changelog',\n  'https://docs.replit.com/updates'\n];\n\nconst allItems = $input.all();\nconst recipientEmail = allItems[0]?.json?.recipientEmail || 'configure-email@gmail.com';\n\nlet sections = '';\nfor (let i = 0; i < 3; i++) {\n  const raw = allItems[i]?.json?.data || allItems[i]?.json?.body || '';\n  const cleaned = extractText(raw).slice(0, 5000);\n  const content = cleaned.length > 150\n    ? cleaned\n    : `[Page returned minimal content. ${URLS[i]} may require JS rendering. Check manually.]`;\n  sections += `\\n\\n=== ${COMPETITORS[i].toUpperCase()} (${URLS[i]}) ===\\n${content}`;\n}\n\nconst today = new Date().toLocaleDateString('en-GB', {\n  weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'\n});\n\nconst text = `Perform competitive intelligence analysis. Date: ${today}.${sections}`;\n\nreturn [{ json: { text, date: today, sources: COMPETITORS.join(', '), recipientEmail } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [980, 370],
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-000000000005",
+      "name": "Build Intelligence Context"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.text }}",
+        "options": {
+          "systemMessage": "You are Sank, an AI competitive intelligence analyst for a product team.\n\nPRODUCT ROADMAP (what we are building):\n1. Reduce time-to-first-deploy from prompt to live URL\n2. Real-time team collaboration on the same project\n3. One-click custom domain with automatic SSL\n4. Native mobile app for reviewing AI-generated changes\n5. Connect external AI tools via open protocol (MCP)\n6. Reusable automation templates for recurring tasks\n7. Usage-based pricing tier for growing teams\n8. In-browser visual editing of generated UI\n\nTASK:\nAnalyze the competitor changelog pages provided. For each meaningful change:\n- Skip typo fixes and cosmetic edits\n- Match it to the most relevant roadmap item by meaning (not keywords)\n- Assign severity: HIGH = direct threat to a roadmap item, MEDIUM = adjacent concern, LOW = minor\n- Write one sentence explaining why it matters to THIS roadmap\n\nIf a page had insufficient content, note: [Competitor]: Page returned minimal content, check manually.\n\nOUTPUT (plain text, under 350 words):\nList signals HIGH first, then MEDIUM, then LOW.\nFormat each: [Competitor] \u2014 [what changed] \u2014 [why it matters] \u2014 Severity: HIGH/MEDIUM/LOW\n\nIf no meaningful changes for a competitor: [Competitor]: Nothing notable this cycle.\n\nEnd with one line only:\nSummary: [one sentence overall competitive assessment]\n\nBe specific and direct. This is a 5-minute read for a busy PM."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.7,
+      "position": [1220, 370],
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-000000000006",
+      "name": "Sank Intelligence Agent"
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-2.5-flash",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1,
+      "position": [1220, 560],
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-000000000007",
+      "name": "Gemini 2.5 Flash",
+      "credentials": {
+        "googlePalmApi": {
+          "id": "ADD_YOUR_GEMINI_CREDENTIAL",
+          "name": "Google Gemini (AI Studio)"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $node['Build Intelligence Context'].json.recipientEmail }}",
+        "subject": "=Sank Intelligence Digest \u2014 {{ $node['Build Intelligence Context'].json.date }}",
+        "emailType": "html",
+        "message": "=<html><body style=\"margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif\"><table width=\"100%\" cellpadding=\"0\" cellspacing=\"0\"><tr><td align=\"center\" style=\"padding:40px 16px\"><table width=\"620\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#ffffff;border-radius:14px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.08)\"><tr><td style=\"background:#0f172a;padding:28px 36px\"><table width=\"100%\"><tr><td><h1 style=\"color:#38bdf8;margin:0;font-size:28px;font-weight:800;letter-spacing:-1px\">Sank</h1><p style=\"color:#64748b;margin:6px 0 0;font-size:11px;text-transform:uppercase;letter-spacing:1.5px\">AI Competitive Intelligence</p></td><td align=\"right\"><p style=\"color:#94a3b8;font-size:12px;margin:0\">{{ $node['Build Intelligence Context'].json.date }}</p></td></tr></table></td></tr><tr><td style=\"padding:32px 36px\"><h2 style=\"color:#0f172a;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin:0 0 20px;border-bottom:2px solid #f1f5f9;padding-bottom:12px\">Today's Intelligence Digest</h2><div style=\"background:#f8fafc;border-left:4px solid #38bdf8;border-radius:0 10px 10px 0;padding:24px 28px;margin-bottom:24px\"><p style=\"color:#1e293b;line-height:1.9;margin:0;font-size:14px;white-space:pre-line\">{{ $json.output }}</p></div><div style=\"background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px 18px;margin-bottom:24px\"><p style=\"color:#166534;font-size:13px;margin:0\">\u2705 Monitoring: {{ $node['Build Intelligence Context'].json.sources }}</p></div><div style=\"border-top:1px solid #f1f5f9;padding-top:20px\"><p style=\"color:#94a3b8;font-size:11px;margin:0;line-height:1.8\">Powered by <strong>Google Gemini 2.5 Flash</strong> &middot; 3-Agent RAG Pipeline &middot; Semantic Matching &middot; Orchestrated by <strong>n8n</strong><br>Sank &middot; Be10X AI Generalist Hackathon B15 &middot; 2026</p></div></td></tr></table></td></tr></table></body></html>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [1460, 370],
+      "id": "aaaaaaaa-aaaa-aaaa-aaaa-000000000008",
+      "name": "Send Intelligence Digest",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "ADD_YOUR_GMAIL_CREDENTIAL",
+          "name": "Gmail account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Manual Test Run": {
+      "main": [
+        [{"node": "Set Competitor Sources", "type": "main", "index": 0}]
+      ]
+    },
+    "Daily 9am Mon-Fri": {
+      "main": [
+        [{"node": "Set Competitor Sources", "type": "main", "index": 0}]
+      ]
+    },
+    "Set Competitor Sources": {
+      "main": [
+        [{"node": "Fetch Changelog Pages", "type": "main", "index": 0}]
+      ]
+    },
+    "Fetch Changelog Pages": {
+      "main": [
+        [{"node": "Build Intelligence Context", "type": "main", "index": 0}]
+      ]
+    },
+    "Build Intelligence Context": {
+      "main": [
+        [{"node": "Sank Intelligence Agent", "type": "main", "index": 0}]
+      ]
+    },
+    "Sank Intelligence Agent": {
+      "main": [
+        [{"node": "Send Intelligence Digest", "type": "main", "index": 0}]
+      ]
+    },
+    "Gemini 2.5 Flash": {
+      "ai_languageModel": [
+        [{"node": "Sank Intelligence Agent", "type": "ai_languageModel", "index": 0}]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {"executionOrder": "v1"},
+  "meta": {"instanceId": "sank-cloud-v3-final"},
+  "id": "sank-cloud-final-v3",
+  "tags": [
+    {"name": "hackathon"},
+    {"name": "competitive-intelligence"},
+    {"name": "rag"},
+    {"name": "ai-agents"}
+  ]
+}

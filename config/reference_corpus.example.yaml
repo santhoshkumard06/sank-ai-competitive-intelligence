@@ -1,0 +1,41 @@
+# Illustrative sample roadmap for a hypothetical "no-code AI app builder"
+# startup. Used so the hackathon demo has something concrete to match
+# competitor signals against. State plainly in your demo video that this
+# is a sample roadmap, not a real company's confidential one — the
+# hackathon's own FAQ explicitly says judges respect that honesty.
+#
+# Replace this file with your own real roadmap/content-plan/whatever your
+# domain's "reference_label" is, and the matching logic works unchanged.
+
+reference_items:
+  - id: "rm-001"
+    text: "Reduce time-to-first-deploy for a new user from prompt to live URL"
+    metadata: {pillar: "onboarding"}
+
+  - id: "rm-002"
+    text: "Let teams collaborate on the same project in real time with comments and presence"
+    metadata: {pillar: "collaboration"}
+
+  - id: "rm-003"
+    text: "One-click custom domain connection with automatic SSL"
+    metadata: {pillar: "deployment"}
+
+  - id: "rm-004"
+    text: "Native mobile app so users can review and approve changes from their phone"
+    metadata: {pillar: "mobile"}
+
+  - id: "rm-005"
+    text: "Let external AI tools and agents connect to the platform via an open protocol"
+    metadata: {pillar: "integrations"}
+
+  - id: "rm-006"
+    text: "Reusable automation templates for recurring tasks like QA passes and launch checklists"
+    metadata: {pillar: "automation"}
+
+  - id: "rm-007"
+    text: "Usage-based pricing tier for teams that outgrow the flat-rate plan"
+    metadata: {pillar: "pricing"}
+
+  - id: "rm-008"
+    text: "In-browser visual editing of generated UI without writing a new prompt"
+    metadata: {pillar: "editor"}
